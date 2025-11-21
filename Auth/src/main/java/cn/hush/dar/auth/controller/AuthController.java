@@ -1,21 +1,41 @@
 package cn.hush.dar.auth.controller;
 
 
+
+import cn.hush.dar.auth.dto.request.LoginRequestDTO;
+
+import cn.hush.dar.auth.dto.response.LoginResponseDTO;
+
+import cn.hush.dar.auth.service.impl.AuthServiceImpl;
+import cn.hush.dar.common.result.Result;
+import cn.hush.dar.common.web.Results;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.RestController;
+import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
 
 /**
  * @program: DAR
- * @description: 登录控制器
+ * @description: 鉴权控制器
  * @author: Hush
  * @create: 2025-11-21 18:46
  **/
 @RestController
 @RequiredArgsConstructor
-@Tag(name = "登录相关功能")
+@RequestMapping("/api/auth")
+@Tag(name = "鉴权相关功能")
+@Slf4j
 public class AuthController {
 
-    public
+    private final AuthServiceImpl authService;
+
+    @Operation(summary = "用户登录")
+    @RequestMapping (value = "login", method = RequestMethod.POST)
+    public Result<LoginResponseDTO> login(@RequestBody LoginRequestDTO requestParam) {
+        log.info("操作员登录:{}", requestParam);
+        return Results.success(authService.login(requestParam));
+    }
 
 }
