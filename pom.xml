@@ -15,33 +15,105 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>DAR</name>
     <description>DAR</description>
-    <url/>
+
+
+    <modules>
+        <module>Auth</module>
+        <module>Common</module>
+        <module>Resource</module>
+        <module>Scheduler</module>
+        <module>Task</module>
+    </modules>
+
 
     <properties>
         <java.version>17</java.version>
+        <spring-boot.version>3.0.7</spring-boot.version>
+        <spring-cloud.version>2022.0.3</spring-cloud.version>
+        <spring-cloud-alibaba.version>2022.0.0.0-RC2</spring-cloud-alibaba.version>
+        <mybatis-flex.version>1.11.0</mybatis-flex.version>
+        <shardingsphere.version>5.3.2</shardingsphere.version>
+        <fastjson2.version>2.0.36</fastjson2.version>
+        <dozer-core.version>6.5.2</dozer-core.version>
+        <hutool-all.version>5.8.27</hutool-all.version>
+        <redisson.version>3.27.2</redisson.version>
+        <guava.version>30.0-jre</guava.version>
+        <jsoup.version>1.15.3</jsoup.version>
+        <knife4j-openapi3-jakarta-spring-boot-starter.version>4.5.0
+        </knife4j-openapi3-jakarta-spring-boot-starter.version>
+        <bizlog-sdk.version>3.0.6</bizlog-sdk.version>
+        <javafaker.version>1.0.2</javafaker.version>
+        <easyexcel.version>4.0.1</easyexcel.version>
+        <xxl-job.version>2.4.1</xxl-job.version>
+        <rocketmq-spring-boot-starter.version>2.3.0</rocketmq-spring-boot-starter.version>
+        <spotless-maven-plugin.version>2.22.1</spotless-maven-plugin.version>
+        <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
+        <elasticsearch-spring-boot-starter.version>2.6.12</elasticsearch-spring-boot-starter.version>
+        <transmittable-thread-local.version>2.14.5</transmittable-thread-local.version>
     </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc</artifactId>
-        </dependency>
 
-        <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-            <scope>runtime</scope>
-        </dependency>
+    <dependencies>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webmvc-test</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>com.mybatis-flex</groupId>
+                <artifactId>mybatis-flex-spring-boot3-starter</artifactId>
+                <version>${mybatis-flex.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.redisson</groupId>
+                <artifactId>redisson-spring-boot-starter</artifactId>
+                <version>${redisson.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>${knife4j-openapi3-jakarta-spring-boot-starter.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.xuxueli</groupId>
+                <artifactId>xxl-job-core</artifactId>
+                <version>${xxl-job.version}</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <plugins>
