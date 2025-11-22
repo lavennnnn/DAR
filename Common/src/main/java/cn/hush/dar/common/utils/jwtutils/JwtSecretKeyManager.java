@@ -26,7 +26,7 @@ public class JwtSecretKeyManager {
     // 环境变量名（生产环境通过该变量注入密钥）
     private static final String ENV_JWT_SECRET = "JWT_SECRET_KEY";
     // 本地密钥文件路径（开发环境自动生成/读取）
-    private static final String LOCAL_SECRET_FILE = "Auth/src/main/resources/jwt-secret.key";
+    private static final String LOCAL_SECRET_FILE = "Common/src/main/resources/jwt-secret.key";
     // 密钥算法（HS256 要求 32 字节密钥）
     private static final String ALGORITHM = "HS256";
 

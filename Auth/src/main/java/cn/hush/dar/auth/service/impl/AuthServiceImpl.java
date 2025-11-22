@@ -8,7 +8,6 @@ import cn.hush.dar.auth.dto.response.LoginResponseDTO;
 import cn.hush.dar.auth.service.AuthService;
 import cn.hush.dar.common.constant.MessageConstant;
 import cn.hush.dar.common.exception.ClientException;
-import cn.hush.dar.common.exception.ServiceException;
 import cn.hush.dar.common.utils.jwtutils.JwtUtil;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
