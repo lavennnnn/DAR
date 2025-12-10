@@ -1,0 +1,2 @@
+jwt:
+  expire-time: 7200000
