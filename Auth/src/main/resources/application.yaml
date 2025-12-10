@@ -27,3 +27,8 @@ springdoc:
     - group: 'default'
       paths-to-match: '/**'
       packages-to-scan: cn.hush.dar
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn

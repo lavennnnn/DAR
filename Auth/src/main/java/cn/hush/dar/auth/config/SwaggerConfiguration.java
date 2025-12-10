@@ -1,4 +1,4 @@
-package cn.hush.dar.common.config;
+package cn.hush.dar.auth.config;
 
 
 import lombok.extern.slf4j.Slf4j;

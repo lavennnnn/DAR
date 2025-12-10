@@ -54,16 +54,4 @@ public class JwtUtil {
             throw new RuntimeException("Token 验证失败", e);
         }
     }
-
-    /**
-     * 验证 Token 是否有效
-     */
-    public boolean isTokenValid(String token) {
-        try {
-            parseToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
 }

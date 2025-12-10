@@ -4,8 +4,10 @@ package cn.hush.dar.auth.controller;
 
 import cn.hush.dar.auth.dto.request.LoginRequestDTO;
 
+import cn.hush.dar.auth.dto.request.RegisterRequestDTO;
 import cn.hush.dar.auth.dto.response.LoginResponseDTO;
 
+import cn.hush.dar.auth.dto.response.RegisterResponseDTO;
 import cn.hush.dar.auth.service.impl.AuthServiceImpl;
 import cn.hush.dar.common.result.Result;
 import cn.hush.dar.common.web.Results;
@@ -38,4 +40,10 @@ public class AuthController {
         return Results.success(authService.login(requestParam));
     }
 
+    @Operation(summary = "用户注册")
+    @RequestMapping(value = "register", method = RequestMethod.POST)
+    public Result<RegisterResponseDTO>  register(@RequestBody RegisterRequestDTO requestParam) {
+        log.info("操作员注册:{}", requestParam);
+        return Results.success(authService.register(requestParam));
+    }
 }
