@@ -1,0 +1,22 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: Scheduler
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/dar?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+  main:
+    allow-bean-definition-overriding: true
+
+# MyBatis-Flex ??
+mybatis-flex:
+  #configuration:
+    # ?? SQL ??????????????? SQL ??
+    #log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    # ?????? Banner ?????????
+    print-banner: false

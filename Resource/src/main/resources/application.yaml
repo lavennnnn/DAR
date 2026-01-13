@@ -1,0 +1,16 @@
+server:
+  port: 10050
+
+spring:
+  application:
+    name: resource
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/dar?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
