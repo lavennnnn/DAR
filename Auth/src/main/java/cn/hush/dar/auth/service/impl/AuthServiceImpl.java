@@ -17,6 +17,7 @@ import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.update.UpdateChain;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.util.Assert;
@@ -26,11 +27,12 @@ import java.util.Date;
 import static cn.hush.dar.common.constant.MessageConstant.ACCOUNT_NOT_FOUND;
 
 /**
- * @program: DAR
+ * @program: DAR1
  * @description:
  * @author: Hush
  * @create: 2025-11-21 20:49
  **/
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl extends ServiceImpl<UserMapper, UserEntity> implements AuthService {
@@ -110,6 +112,15 @@ public class AuthServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
                 .username(username)
                 .token(token)
                 .build();
+    }
+
+    @Override
+    public String getNickname(String name) {
+        QueryWrapper qw = QueryWrapper.create().eq(UserEntity::getUsername, name);
+        UserEntity userEntity = userMapper.selectOneByQuery(qw);
+        String nickname = userEntity.getNickname();
+        log.info("nickname 为:{}", nickname);
+        return  nickname;
     }
 
 
