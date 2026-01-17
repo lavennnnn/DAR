@@ -72,6 +72,7 @@ public class AuthServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
 
         return LoginResponseDTO.builder()
                 .token(token)
+                .username(username)
                 .nickname(user.getNickname())
                 .userId(user.getId()).
                 build();
@@ -112,15 +113,6 @@ public class AuthServiceImpl extends ServiceImpl<UserMapper, UserEntity> impleme
                 .username(username)
                 .token(token)
                 .build();
-    }
-
-    @Override
-    public String getNickname(String name) {
-        QueryWrapper qw = QueryWrapper.create().eq(UserEntity::getUsername, name);
-        UserEntity userEntity = userMapper.selectOneByQuery(qw);
-        String nickname = userEntity.getNickname();
-        log.info("nickname 为:{}", nickname);
-        return  nickname;
     }
 
 

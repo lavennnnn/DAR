@@ -22,5 +22,4 @@ public interface AuthService extends IService<UserEntity> {
      */
     RegisterResponseDTO register(RegisterRequestDTO requestParam);
 
-    String getNickname (String name);
 }

@@ -18,6 +18,8 @@ public class LoginResponseDTO {
 
     private String token;
 
+    private String username;
+
     private String nickname;
 
     private Integer userId;

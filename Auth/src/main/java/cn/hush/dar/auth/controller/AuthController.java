@@ -47,10 +47,4 @@ public class AuthController {
         return Results.success(authService.register(requestParam));
     }
 
-    @Operation(summary = "查询昵称")
-    @RequestMapping(value = "getNickname", method =  RequestMethod.GET)
-    public Result<String> getNickname(@RequestParam String name){
-        return Results.success(authService.getNickname(name));
-    }
-
 }
