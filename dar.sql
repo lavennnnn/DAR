@@ -67,3 +67,12 @@ create table user
         unique (username)
 )
     comment '用户表';
+
+create table t_scheduler_config
+(
+    id          int auto_increment
+        primary key,
+    strategy    varchar(32) default 'DRF' not null comment '调度策略: DRF / PRIORITY / FCFS',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP
+)
+    comment '调度策略配置';

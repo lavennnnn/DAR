@@ -33,6 +33,8 @@ public class TaskEntity {
     private Integer neededCpuCores;
     private Integer neededGpuMem;
     private Integer duration; // 模拟任务耗时(秒)
+    private Integer remainingSeconds; // 剩余时间(秒)
+    private Double virtualShare; // DRF 累计公平份额
 
     // 0:PENDING, 1:RUNNING, 2:COMPLETED, 3:FAILED
     private Integer status;

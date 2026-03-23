@@ -63,6 +63,84 @@ public class ResourceController {
         return Results.success(resourceService.getAllGPUs());
     }
 
+    // --- 资源管理：天线 ---
+    @PostMapping("/antenna")
+    public Result<AntennaResource> createAntenna(@RequestBody AntennaResource antenna) {
+        return Results.success(resourceService.createAntenna(antenna));
+    }
+
+    @PutMapping("/antenna/{id}")
+    public Result<Boolean> updateAntenna(@PathVariable Integer id, @RequestBody AntennaResource antenna) {
+        return Results.success(resourceService.updateAntenna(id, antenna));
+    }
+
+    @DeleteMapping("/antenna/{id}")
+    public Result<Boolean> deleteAntenna(@PathVariable Integer id) {
+        return Results.success(resourceService.deleteAntenna(id));
+    }
+
+    @PatchMapping("/antenna/{id}/status")
+    public Result<Boolean> updateAntennaStatus(@PathVariable Integer id, @RequestParam Integer status) {
+        return Results.success(resourceService.updateAntennaStatus(id, status));
+    }
+
+    @PostMapping("/antenna/batch")
+    public Result<Integer> batchCreateAntenna(@RequestBody List<AntennaResource> antennas) {
+        return Results.success(resourceService.batchCreateAntennas(antennas));
+    }
+
+    // --- 资源管理：CPU ---
+    @PostMapping("/cpu")
+    public Result<CPUResource> createCpu(@RequestBody CPUResource cpu) {
+        return Results.success(resourceService.createCpu(cpu));
+    }
+
+    @PutMapping("/cpu/{id}")
+    public Result<Boolean> updateCpu(@PathVariable Integer id, @RequestBody CPUResource cpu) {
+        return Results.success(resourceService.updateCpu(id, cpu));
+    }
+
+    @DeleteMapping("/cpu/{id}")
+    public Result<Boolean> deleteCpu(@PathVariable Integer id) {
+        return Results.success(resourceService.deleteCpu(id));
+    }
+
+    @PatchMapping("/cpu/{id}/status")
+    public Result<Boolean> updateCpuStatus(@PathVariable Integer id, @RequestParam Integer status) {
+        return Results.success(resourceService.updateCpuStatus(id, status));
+    }
+
+    @PostMapping("/cpu/batch")
+    public Result<Integer> batchCreateCpu(@RequestBody List<CPUResource> cpus) {
+        return Results.success(resourceService.batchCreateCpus(cpus));
+    }
+
+    // --- 资源管理：GPU ---
+    @PostMapping("/gpu")
+    public Result<GPUResource> createGpu(@RequestBody GPUResource gpu) {
+        return Results.success(resourceService.createGpu(gpu));
+    }
+
+    @PutMapping("/gpu/{id}")
+    public Result<Boolean> updateGpu(@PathVariable Integer id, @RequestBody GPUResource gpu) {
+        return Results.success(resourceService.updateGpu(id, gpu));
+    }
+
+    @DeleteMapping("/gpu/{id}")
+    public Result<Boolean> deleteGpu(@PathVariable Integer id) {
+        return Results.success(resourceService.deleteGpu(id));
+    }
+
+    @PatchMapping("/gpu/{id}/status")
+    public Result<Boolean> updateGpuStatus(@PathVariable Integer id, @RequestParam Integer status) {
+        return Results.success(resourceService.updateGpuStatus(id, status));
+    }
+
+    @PostMapping("/gpu/batch")
+    public Result<Integer> batchCreateGpu(@RequestBody List<GPUResource> gpus) {
+        return Results.success(resourceService.batchCreateGpus(gpus));
+    }
+
     // --- 新增：分配测试接口 ---
 
     @PostMapping("/allocate")

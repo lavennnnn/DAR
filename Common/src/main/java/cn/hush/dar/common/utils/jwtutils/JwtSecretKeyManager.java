@@ -27,6 +27,9 @@ public class JwtSecretKeyManager {
     private static final String ENV_JWT_SECRET = "JWT_SECRET_KEY";
     // 本地密钥文件路径（开发环境自动生成/读取）
     private static final String LOCAL_SECRET_FILE = "Common/src/main/resources/jwt-secret.key";
+    // User home fallback (stable across modules)
+    private static final String USER_HOME_SECRET_FILE =
+            System.getProperty("user.home") + File.separator + ".dar" + File.separator + "jwt-secret.key";
     // 密钥算法（HS256 要求 32 字节密钥）
     private static final String ALGORITHM = "HS256";
 
@@ -47,12 +50,26 @@ public class JwtSecretKeyManager {
             }
         }
 
-        // 2. 环境变量不存在，读取本地密钥文件
-        File secretFile = new File(LOCAL_SECRET_FILE);
-        if (secretFile.exists() && secretFile.length() > 0) {
-            try {
-                Resource resource = new ClassPathResource("jwt-secret.key");
+        // 2. 优先读取类路径资源（打包/多模块运行时更稳定）
+        try {
+            Resource resource = new ClassPathResource("jwt-secret.key");
+            if (resource.exists()) {
                 InputStream inputStream = resource.getInputStream();
+                String fileSecret = new String(FileCopyUtils.copyToByteArray(inputStream), StandardCharsets.UTF_8).trim();
+                if (!fileSecret.isEmpty()) {
+                    byte[] keyBytes = Base64.getDecoder().decode(fileSecret);
+                    validateKeyLength(keyBytes);
+                    return Keys.hmacShaKeyFor(keyBytes);
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("类路径密钥文件 jwt-secret.key 读取失败或密钥非法", e);
+        }
+
+        // 3. 兼容旧的相对路径密钥文件
+        File legacySecretFile = new File(LOCAL_SECRET_FILE);
+        if (legacySecretFile.exists() && legacySecretFile.length() > 0) {
+            try (InputStream inputStream = new java.io.FileInputStream(legacySecretFile)) {
                 String fileSecret = new String(FileCopyUtils.copyToByteArray(inputStream), StandardCharsets.UTF_8).trim();
                 byte[] keyBytes = Base64.getDecoder().decode(fileSecret);
                 validateKeyLength(keyBytes);
@@ -62,12 +79,19 @@ public class JwtSecretKeyManager {
             }
         }
 
-        // 3. 本地文件不存在，自动生成密钥并写入文件
+        // 4. 生成密钥并写入用户目录（避免相对路径导致多模块不一致）
         SecretKey secretKey = Keys.secretKeyFor(io.jsonwebtoken.SignatureAlgorithm.HS256);
         String base64Secret = Base64.getEncoder().encodeToString(secretKey.getEncoded());
-        try (FileOutputStream fos = new FileOutputStream(secretFile)) {
-            fos.write(base64Secret.getBytes(StandardCharsets.UTF_8));
-            System.out.println("✅ 本地密钥文件不存在，已自动生成并保存到：" + LOCAL_SECRET_FILE);
+        try {
+            File userHomeFile = new File(USER_HOME_SECRET_FILE);
+            File parent = userHomeFile.getParentFile();
+            if (parent != null && !parent.exists()) {
+                parent.mkdirs();
+            }
+            try (FileOutputStream fos = new FileOutputStream(userHomeFile)) {
+                fos.write(base64Secret.getBytes(StandardCharsets.UTF_8));
+            }
+            System.out.println("✅ 本地密钥文件不存在，已自动生成并保存到：" + USER_HOME_SECRET_FILE);
             System.out.println("⚠️  开发环境使用，生产环境请通过环境变量 JWT_SECRET_KEY 注入密钥");
         } catch (Exception e) {
             throw new RuntimeException("自动生成密钥后写入文件失败", e);
