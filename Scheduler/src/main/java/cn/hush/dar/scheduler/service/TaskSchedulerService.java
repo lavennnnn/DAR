@@ -7,7 +7,6 @@ import cn.hush.dar.resource.dao.entity.GPUResource;
 import cn.hush.dar.resource.service.ResourceService;
 import cn.hush.dar.scheduler.dao.entity.ScheduleLog;
 import cn.hush.dar.scheduler.dao.mapper.ScheduleLogMapper;
-import cn.hush.dar.scheduler.model.ScheduleStrategy;
 import cn.hush.dar.scheduler.websocket.WebSocketServer;
 import cn.hush.dar.task.dao.entity.TaskEntity;
 
@@ -21,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.Set;
@@ -41,12 +41,14 @@ public class TaskSchedulerService {
     private final TaskService taskService;
     private final ResourceService resourceService;
     private final ScheduleLogMapper scheduleLogMapper;
-    private final SchedulerConfigService schedulerConfigService;
+    private final AntennaSchedulingService antennaSchedulingService;
+    private final ComputeSchedulingService computeSchedulingService;
     private static final int TIME_SLICE_SECONDS = 5;
     private static final int RESOURCE_ALERT_STATUS = 2;
     private final Set<Integer> faultAntennaIds = ConcurrentHashMap.newKeySet();
     private final Set<Integer> faultCpuIds = ConcurrentHashMap.newKeySet();
     private final Set<Integer> faultGpuIds = ConcurrentHashMap.newKeySet();
+    private final Map<Integer, String> lastWaitReasons = new ConcurrentHashMap<>();
 
     /**
      * 定时调度器：每 5 秒执行一次
@@ -83,28 +85,31 @@ public class TaskSchedulerService {
             }
         }
 
-        ScheduleStrategy strategy = ScheduleStrategy.from(schedulerConfigService.getStrategy());
-
         // DRF: 计算系统总资源，用于估算每个任务的主导份额
-        int totalAntennas = resourceService.getAllAntennas().size();
+        int totalAntennas = resourceService.getAllAntennas().stream()
+                .filter(this::isResourceOnline)
+                .toList()
+                .size();
         int totalCpuCores = resourceService.getAllCPUs().stream()
+                .filter(this::isResourceOnline)
                 .mapToInt(c -> c.getTotalCores() == null ? 0 : c.getTotalCores())
                 .sum();
         int totalGpuMem = resourceService.getAllGPUs().stream()
+                .filter(this::isResourceOnline)
                 .mapToInt(g -> g.getTotalMemory() == null ? 0 : g.getTotalMemory())
                 .sum();
 
         // 可用资源快照（用于DRF循环中的快速可行性判断）
-        int availAntennas = (int) resourceService.getAllAntennas().stream()
-                .filter(a -> a.getStatus() == 0).count();
         int availCpu = resourceService.getAllCPUs().stream()
+                .filter(this::isResourceOnline)
                 .mapToInt(c -> Math.max(0, (c.getTotalCores() == null ? 0 : c.getTotalCores()) - (c.getUsedCores() == null ? 0 : c.getUsedCores())))
                 .sum();
         int availGpu = resourceService.getAllGPUs().stream()
+                .filter(this::isResourceOnline)
                 .mapToInt(g -> Math.max(0, (g.getTotalMemory() == null ? 0 : g.getTotalMemory()) - (g.getUsedMemory() == null ? 0 : g.getUsedMemory())))
                 .sum();
 
-        Comparator<TaskEntity> taskComparator = buildComparator(strategy, totalAntennas, totalCpuCores, totalGpuMem);
+        Comparator<TaskEntity> taskComparator = buildComparator(totalAntennas, totalCpuCores, totalGpuMem);
 
         List<TaskEntity> queue = new ArrayList<>(pendingTasks);
         boolean allocatedInRound = true;
@@ -114,14 +119,16 @@ public class TaskSchedulerService {
 
             for (int i = 0; i < queue.size(); i++) {
                 TaskEntity task = queue.get(i);
-                int needAnt = task.getNeededAntennas() == null ? 0 : task.getNeededAntennas();
                 int needCpu = task.getNeededCpuCores() == null ? 0 : task.getNeededCpuCores();
                 int needGpu = task.getNeededGpuMem() == null ? 0 : task.getNeededGpuMem();
 
-                if (needAnt <= availAntennas && needCpu <= availCpu && needGpu <= availGpu) {
+                boolean cpuEnough = needCpu <= availCpu;
+                boolean gpuEnough = needGpu <= availGpu;
+                boolean antennaReady = antennaSchedulingService.canAllocate(task);
+
+                if (cpuEnough && gpuEnough && antennaReady) {
                     boolean scheduled = tryAllocateResource(task);
                     if (scheduled) {
-                        availAntennas -= needAnt;
                         availCpu -= needCpu;
                         availGpu -= needGpu;
                         double delta = computeDominantShare(task, totalAntennas, totalCpuCores, totalGpuMem);
@@ -134,6 +141,18 @@ public class TaskSchedulerService {
                         allocatedInRound = true;
                         break; // 每轮分配一个，更新资源后再排序
                     }
+                } else {
+                    List<String> reasons = new ArrayList<>();
+                    if (!cpuEnough) {
+                        reasons.add("cpu need=" + needCpu + ",available=" + availCpu);
+                    }
+                    if (!gpuEnough) {
+                        reasons.add("gpu need=" + needGpu + ",available=" + availGpu);
+                    }
+                    if (!antennaReady) {
+                        reasons.add("antenna units unavailable or constrained");
+                    }
+                    logWaitIfChanged(task.getId(), "WAIT_RESOURCE", String.join(";", reasons));
                 }
             }
         }
@@ -143,62 +162,56 @@ public class TaskSchedulerService {
      * 尝试为单个任务分配资源
      */
     private boolean tryAllocateResource(TaskEntity task) {
-        // 1. 检查资源池中是否有足够的空闲天线
-        List<AntennaResource> freeAntennas = resourceService.getAllAntennas().stream()
-                .filter(a -> a.getStatus() == 0) // 0 表示空闲
-                .limit(task.getNeededAntennas())
-                .collect(Collectors.toList());
-
-        // 2. 资源不足判断
-        if (freeAntennas.size() < task.getNeededAntennas()) {
-            log.debug("任务[{}] 资源不足 (需 {}, 剩 {})，等待下一轮", task.getName(), task.getNeededAntennas(), freeAntennas.size());
+        AntennaSchedulingService.SelectionResult antennaPlan = antennaSchedulingService.selectPlan(task);
+        List<Integer> antennaIds = antennaPlan.getAntennaIds();
+        int neededAntennas = task.getNeededAntennas() == null ? 0 : task.getNeededAntennas();
+        if (antennaIds.size() < neededAntennas) {
+            log.debug("task[{}] antenna resources are not schedulable yet", task.getName());
+            logWaitIfChanged(task.getId(), "WAIT_ANTENNA",
+                    "neededUnits=" + neededAntennas
+                            + ",selectedUnits=" + antennaIds.size()
+                            + ",algorithm=" + antennaPlan.getAlgorithm()
+                            + ",surface=" + antennaPlan.getSurfaceCode());
             return false;
         }
 
         int neededCpu = task.getNeededCpuCores() == null ? 0 : task.getNeededCpuCores();
         int neededGpu = task.getNeededGpuMem() == null ? 0 : task.getNeededGpuMem();
-
-        if (neededCpu > 0) {
-            int availableCpu = resourceService.getAllCPUs().stream()
-                    .mapToInt(c -> Math.max(0, c.getTotalCores() - c.getUsedCores()))
-                    .sum();
-            if (availableCpu < neededCpu) {
-                log.debug("任务[{}] CPU 资源不足 (需 {}, 剩 {})，等待下一轮", task.getName(), neededCpu, availableCpu);
-                return false;
-            }
-        }
-
-        if (neededGpu > 0) {
-            int availableGpu = resourceService.getAllGPUs().stream()
-                    .mapToInt(g -> Math.max(0, g.getTotalMemory() - g.getUsedMemory()))
-                    .sum();
-            if (availableGpu < neededGpu) {
-                log.debug("任务[{}] GPU 资源不足 (需 {}, 剩 {})，等待下一轮", task.getName(), neededGpu, availableGpu);
-                return false;
-            }
+        ComputeSchedulingService.ComputePlan computePlan = computeSchedulingService.plan(task);
+        if (!computePlan.isFeasible()) {
+            log.debug("task[{}] compute resources are not schedulable yet: {}", task.getName(), computePlan.getDetail());
+            logWaitIfChanged(task.getId(), "WAIT_COMPUTE", computePlan.getDetail());
+            return false;
         }
 
         // 3. 执行分配 (原子操作)
-        List<Integer> antennaIds = freeAntennas.stream().map(AntennaResource::getId).collect(Collectors.toList());
-        boolean antennaOk = resourceService.allocateAntennas(antennaIds, task.getId());
+        boolean antennaOk = resourceService.allocateAntennas(
+                antennaIds,
+                task.getId(),
+                task.getBeamFrequency(),
+                task.getBeamGroup()
+        );
 
         if (!antennaOk) {
+            logWaitIfChanged(task.getId(), "WAIT_ALLOCATE", "antenna allocation failed");
             log.warn("FAILED: 任务[{}] 天线资源分配失败", task.getName());
             return false;
         }
 
-        boolean cpuOk = resourceService.allocateCpuCores(task.getId(), neededCpu);
+        boolean cpuOk = resourceService.allocateCpuPlan(task.getId(), computePlan.getCpuAllocations());
         if (!cpuOk) {
             resourceService.releaseResourcesByTask(task.getId());
-            log.warn("FAILED: 任务[{}] CPU 资源分配失败", task.getName());
+            log.warn("FAILED: task[{}] cpu resources allocation failed", task.getName());
+            logWaitIfChanged(task.getId(), "WAIT_ALLOCATE", "cpu allocation failed");
             return false;
         }
 
-        boolean gpuOk = resourceService.allocateGpuMem(task.getId(), neededGpu);
+        boolean gpuOk = resourceService.allocateGpuCard(task.getId(), computePlan.getGpuId(), neededGpu);
         if (!gpuOk) {
             resourceService.releaseResourcesByTask(task.getId());
             resourceService.releaseCpuCores(task.getId());
-            log.warn("FAILED: 任务[{}] GPU 资源分配失败", task.getName());
+            log.warn("FAILED: task[{}] gpu resources allocation failed", task.getName());
+            logWaitIfChanged(task.getId(), "WAIT_ALLOCATE", "gpu allocation failed");
             return false;
         }
 
@@ -213,15 +226,64 @@ public class TaskSchedulerService {
         log.info("SUCCESS: 任务[{}] 调度成功，已分配天线: {}", task.getName(), antennaIds);
 
         // 5. 推送消息给前端
+        lastWaitReasons.remove(task.getId());
         String msg = String.format("{\"type\":\"TASK_START\", \"taskId\":%d, \"antennas\":%s}",
                 task.getId(), antennaIds.toString());
         WebSocketServer.sendInfo(msg);
+        String scenario = classifyScenario(task, antennaIds);
+        String decision = classifyDecision(task, scenario, computePlan, antennaPlan);
         logSchedule(task.getId(), "SCHEDULE_START",
-                String.format("antennas=%s,cpu=%d,gpu=%d",
+                String.format("scenario=%s,decision=%s,antennas=%s,cpu=%s,gpu=%s,computeMode=%s,computeScore=%.4f/%.4f,computeDetail=%s,algorithm=%s,surface=%s",
+                        scenario,
+                        decision,
                         antennaIds.toString(),
-                        task.getNeededCpuCores() == null ? 0 : task.getNeededCpuCores(),
-                        task.getNeededGpuMem() == null ? 0 : task.getNeededGpuMem()));
+                        computeSchedulingService.formatCpuPlan(computePlan.getCpuAllocations()),
+                        computePlan.getGpuId() == null ? "-" : ("GPU-" + computePlan.getGpuId() + ":" + neededGpu),
+                        computePlan.getMode(),
+                        computePlan.getCpuScore() == null ? 0.0 : computePlan.getCpuScore(),
+                        computePlan.getGpuScore() == null ? 0.0 : computePlan.getGpuScore(),
+                        computePlan.getDetail(),
+                        antennaPlan.getAlgorithm(),
+                        antennaPlan.getSurfaceCode()));
         return true;
+    }
+
+    private String classifyScenario(TaskEntity task, List<Integer> antennaIds) {
+        int priority = task.getPriority() == null ? 0 : task.getPriority();
+        int neededAntennas = task.getNeededAntennas() == null ? 0 : task.getNeededAntennas();
+        int neededCpu = task.getNeededCpuCores() == null ? 0 : task.getNeededCpuCores();
+        int neededGpu = task.getNeededGpuMem() == null ? 0 : task.getNeededGpuMem();
+        Integer deadlineMs = task.getDeadlineMs();
+        boolean hasDependencyRule = hasText(task.getDependsOnTaskIds()) || hasText(task.getRepelTaskIds());
+
+        if (hasDependencyRule) return "DEPENDENCY_CONSTRAINED";
+        if (neededGpu > 0) return "GPU_ACCELERATED";
+        if (deadlineMs != null && deadlineMs > 0 && deadlineMs <= 100) return "LOW_LATENCY";
+        if (priority >= 80 && neededAntennas <= 8) return "HIGH_PRIORITY_SMALL";
+        if (neededAntennas >= 24 || (antennaIds != null && antennaIds.size() >= 24)) return "LARGE_ARRAY";
+        if (neededCpu >= 32) return "CPU_INTENSIVE";
+        return "BALANCED_MULTI_RESOURCE";
+    }
+
+    private String classifyDecision(TaskEntity task,
+                                    String scenario,
+                                    ComputeSchedulingService.ComputePlan computePlan,
+                                    AntennaSchedulingService.SelectionResult antennaPlan) {
+        return switch (scenario) {
+            case "DEPENDENCY_CONSTRAINED" -> "DEPENDENCY_SAFE";
+            case "GPU_ACCELERATED" -> "GPU_LOCALITY_SINGLE_CARD";
+            case "LOW_LATENCY" -> "FAST_FEASIBLE";
+            case "HIGH_PRIORITY_SMALL" -> "QUALITY_LOW_REUSE";
+            case "LARGE_ARRAY" -> Boolean.FALSE.equals(task.getAllowCrossSurface())
+                    ? "LARGE_SINGLE_SURFACE"
+                    : "SCALABLE_CROSS_SURFACE";
+            case "CPU_INTENSIVE" -> "COMPUTE_LOAD_BALANCE";
+            default -> "FAIR_BALANCED";
+        };
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**
@@ -243,21 +305,22 @@ public class TaskSchedulerService {
         );
         boolean shouldPreempt = false;
         if (!pendingTasks.isEmpty()) {
-            int availAntennas = (int) resourceService.getAllAntennas().stream()
-                    .filter(a -> a.getStatus() == 0).count();
             int availCpu = resourceService.getAllCPUs().stream()
+                    .filter(this::isResourceOnline)
                     .mapToInt(c -> Math.max(0, (c.getTotalCores() == null ? 0 : c.getTotalCores()) - (c.getUsedCores() == null ? 0 : c.getUsedCores())))
                     .sum();
             int availGpu = resourceService.getAllGPUs().stream()
+                    .filter(this::isResourceOnline)
                     .mapToInt(g -> Math.max(0, (g.getTotalMemory() == null ? 0 : g.getTotalMemory()) - (g.getUsedMemory() == null ? 0 : g.getUsedMemory())))
                     .sum();
 
             boolean canScheduleWithFree = false;
             for (TaskEntity t : pendingTasks) {
-                int needAnt = t.getNeededAntennas() == null ? 0 : t.getNeededAntennas();
                 int needCpu = t.getNeededCpuCores() == null ? 0 : t.getNeededCpuCores();
                 int needGpu = t.getNeededGpuMem() == null ? 0 : t.getNeededGpuMem();
-                if (needAnt <= availAntennas && needCpu <= availCpu && needGpu <= availGpu) {
+                if (needCpu <= availCpu
+                        && needGpu <= availGpu
+                        && antennaSchedulingService.canAllocate(t)) {
                     canScheduleWithFree = true;
                     break;
                 }
@@ -357,6 +420,7 @@ public class TaskSchedulerService {
         log.info("COMPLETED: 任务[{}] 执行结束，资源已释放", task.getName());
 
         // 推送消息给前端
+        lastWaitReasons.remove(task.getId());
         String msg = String.format("{\"type\":\"TASK_END\", \"taskId\":%d}", task.getId());
         WebSocketServer.sendInfo(msg);
         logSchedule(task.getId(), "COMPLETE", "endTime=" + task.getEndTime());
@@ -372,21 +436,32 @@ public class TaskSchedulerService {
                 .build());
     }
 
-    private Comparator<TaskEntity> buildComparator(ScheduleStrategy strategy,
-                                                   int totalAntennas,
+    private void logWaitIfChanged(Integer taskId, String action, String detail) {
+        if (taskId == null || detail == null || detail.isBlank()) {
+            return;
+        }
+        String signature = action + ":" + detail;
+        String previous = lastWaitReasons.put(taskId, signature);
+        if (!signature.equals(previous)) {
+            logSchedule(taskId, action, detail);
+        }
+    }
+
+    private boolean isResourceOnline(AntennaResource antenna) {
+        return antenna != null && (antenna.getStatus() == null || antenna.getStatus() != RESOURCE_ALERT_STATUS);
+    }
+
+    private boolean isResourceOnline(CPUResource cpu) {
+        return cpu != null && (cpu.getStatus() == null || cpu.getStatus() != RESOURCE_ALERT_STATUS);
+    }
+
+    private boolean isResourceOnline(GPUResource gpu) {
+        return gpu != null && (gpu.getStatus() == null || gpu.getStatus() != RESOURCE_ALERT_STATUS);
+    }
+
+    private Comparator<TaskEntity> buildComparator(int totalAntennas,
                                                    int totalCpuCores,
                                                    int totalGpuMem) {
-        if (strategy == ScheduleStrategy.PRIORITY) {
-            return Comparator
-                    .comparing(TaskEntity::getPriority, Comparator.nullsLast(Comparator.reverseOrder()))
-                    .thenComparing(TaskEntity::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(TaskEntity::getId, Comparator.nullsLast(Comparator.naturalOrder()));
-        }
-        if (strategy == ScheduleStrategy.FCFS) {
-            return Comparator
-                    .comparing(TaskEntity::getCreateTime, Comparator.nullsLast(Comparator.naturalOrder()))
-                    .thenComparing(TaskEntity::getId, Comparator.nullsLast(Comparator.naturalOrder()));
-        }
         return Comparator
                 .comparingDouble((TaskEntity t) -> t.getVirtualShare() == null ? 0.0 : t.getVirtualShare())
                 .thenComparingDouble((TaskEntity t) -> computeDominantShare(t, totalAntennas, totalCpuCores, totalGpuMem))

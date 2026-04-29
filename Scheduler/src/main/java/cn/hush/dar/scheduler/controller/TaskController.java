@@ -38,6 +38,14 @@ public class TaskController {
         if(task.getDuration() == null) task.setDuration(10);
         if (task.getRemainingSeconds() == null) task.setRemainingSeconds(task.getDuration());
         if (task.getVirtualShare() == null) task.setVirtualShare(0.0);
+        if (task.getBeamGroup() != null && task.getBeamGroup().isBlank()) task.setBeamGroup(null);
+        if (task.getPreferredSurface() != null && task.getPreferredSurface().isBlank()) task.setPreferredSurface(null);
+        task.setAntennaScheduleMode(null);
+        task.setComputeScheduleMode(null);
+        if (task.getDependsOnTaskIds() != null && task.getDependsOnTaskIds().isBlank()) task.setDependsOnTaskIds(null);
+        if (task.getRepelTaskIds() != null && task.getRepelTaskIds().isBlank()) task.setRepelTaskIds(null);
+        if (task.getAllowCrossSurface() == null) task.setAllowCrossSurface(true);
+        if (task.getTargetReuseLimit() == null) task.setTargetReuseLimit(3);
 
         taskService.save(task);
 
@@ -64,7 +72,7 @@ public class TaskController {
         task.setEndTime(new Date());
         taskService.updateById(task);
 
-        String msg = String.format("{\"type\":\"TASK_END\", \"taskId\":%d}", taskId);
+        String msg = String.format("{\"type\":\"TASK_CANCEL\", \"taskId\":%d}", taskId);
         WebSocketServer.sendInfo(msg);
         scheduleLogMapper.insert(ScheduleLog.builder()
                 .taskId(taskId)
@@ -101,3 +109,4 @@ public class TaskController {
         return Results.success(removed);
     }
 }
+

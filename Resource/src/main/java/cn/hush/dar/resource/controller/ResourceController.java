@@ -1,25 +1,22 @@
 package cn.hush.dar.resource.controller;
 
-
+import cn.hush.dar.common.utils.jwtutils.JwtUtil;
 import cn.hush.dar.common.result.Result;
 import cn.hush.dar.common.web.Results;
 import cn.hush.dar.resource.dao.entity.AntennaResource;
 import cn.hush.dar.resource.dao.entity.CPUResource;
 import cn.hush.dar.resource.dao.entity.GPUResource;
+import cn.hush.dar.resource.dao.entity.PhysicalAntennaResource;
 import cn.hush.dar.resource.service.ResourceService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-
-/**
- * @program: DAR
- * @description:
- * @author: Hush
- * @create: 2026-01-05 22:13
- **/
 
 @RestController
 @RequestMapping("/api/resource")
@@ -28,29 +25,55 @@ import java.util.List;
 public class ResourceController {
 
     private final ResourceService resourceService;
+    private final JwtUtil jwtUtil;
 
-    /**
-     * 一键初始化所有模拟数据 (Antenna, CPU, GPU)
-     */
     @PostMapping("/init")
-    public Result<Void> initMockData() {
+    public Result<Void> initMockData(HttpServletRequest request) {
+        requireAuthorized(request);
         resourceService.initMockData();
         return Results.success();
     }
 
-
-    // 3. 一键重置 (演示出错时很有用)
     @PostMapping("/reset")
-    public Result<Void> reset() {
+    public Result<Void> reset(HttpServletRequest request) {
+        requireAuthorized(request);
         resourceService.resetAllResources();
         return Results.success();
     }
 
-    // --- 查询接口 ---
-
     @GetMapping("/antenna/list")
     public Result<List<AntennaResource>> getAntennaList() {
         return Results.success(resourceService.getAllAntennas());
+    }
+
+    @GetMapping("/antenna/physical/list")
+    public Result<List<PhysicalAntennaResource>> getPhysicalAntennaList() {
+        return Results.success(resourceService.getPhysicalAntennas());
+    }
+
+    @PostMapping("/antenna/physical")
+    public Result<PhysicalAntennaResource> createPhysicalAntenna(@RequestBody PhysicalAntennaResource antenna) {
+        return Results.success(resourceService.createPhysicalAntenna(antenna));
+    }
+
+    @PutMapping("/antenna/physical/{id}")
+    public Result<Boolean> updatePhysicalAntenna(@PathVariable Integer id, @RequestBody PhysicalAntennaResource antenna) {
+        return Results.success(resourceService.updatePhysicalAntenna(id, antenna));
+    }
+
+    @DeleteMapping("/antenna/physical/{id}")
+    public Result<Boolean> deletePhysicalAntenna(@PathVariable Integer id) {
+        return Results.success(resourceService.deletePhysicalAntenna(id));
+    }
+
+    @PatchMapping("/antenna/physical/{id}/status")
+    public Result<Boolean> updatePhysicalAntennaStatus(@PathVariable Integer id, @RequestParam Integer status) {
+        return Results.success(resourceService.updatePhysicalAntennaStatus(id, status));
+    }
+
+    @PostMapping("/antenna/physical/batch")
+    public Result<Integer> batchCreatePhysicalAntenna(@RequestBody List<PhysicalAntennaResource> antennas) {
+        return Results.success(resourceService.batchCreatePhysicalAntennas(antennas));
     }
 
     @GetMapping("/cpu/list")
@@ -63,7 +86,6 @@ public class ResourceController {
         return Results.success(resourceService.getAllGPUs());
     }
 
-    // --- 资源管理：天线 ---
     @PostMapping("/antenna")
     public Result<AntennaResource> createAntenna(@RequestBody AntennaResource antenna) {
         return Results.success(resourceService.createAntenna(antenna));
@@ -89,7 +111,6 @@ public class ResourceController {
         return Results.success(resourceService.batchCreateAntennas(antennas));
     }
 
-    // --- 资源管理：CPU ---
     @PostMapping("/cpu")
     public Result<CPUResource> createCpu(@RequestBody CPUResource cpu) {
         return Results.success(resourceService.createCpu(cpu));
@@ -115,7 +136,6 @@ public class ResourceController {
         return Results.success(resourceService.batchCreateCpus(cpus));
     }
 
-    // --- 资源管理：GPU ---
     @PostMapping("/gpu")
     public Result<GPUResource> createGpu(@RequestBody GPUResource gpu) {
         return Results.success(resourceService.createGpu(gpu));
@@ -141,16 +161,13 @@ public class ResourceController {
         return Results.success(resourceService.batchCreateGpus(gpus));
     }
 
-    // --- 新增：分配测试接口 ---
-
     @PostMapping("/allocate")
     public Result<Boolean> allocate(@RequestBody AllocateRequest request) {
         boolean success = resourceService.allocateAntennas(request.getAntennaIds(), request.getTaskId());
         if (success) {
             return Results.success(true);
-        } else {
-            return Results.failure("RESOURCE_BUSY", "资源已被占用或不足");
         }
+        return Results.failure("RESOURCE_BUSY", "资源已被占用或不足");
     }
 
     @PostMapping("/release")
@@ -159,11 +176,21 @@ public class ResourceController {
         return Results.success();
     }
 
-    // 内部 DTO 类，用于接收分配请求
     @Data
     public static class AllocateRequest {
         private List<Integer> antennaIds;
         private Integer taskId;
     }
-}
 
+    private void requireAuthorized(HttpServletRequest request) {
+        String token = request.getHeader("Authorization");
+        if (token == null || token.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+        try {
+            jwtUtil.parseToken(token);
+        } catch (RuntimeException ex) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Unauthorized");
+        }
+    }
+}

@@ -12,18 +12,14 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("t_antenna_unit")
-public class AntennaResource {
+@Table("t_antenna")
+public class PhysicalAntennaResource {
     @Id(keyType = KeyType.Auto)
     private Integer id;
-    private Integer antennaId;
-    private String unitCode;
+    private String code;
+    private String name;
+    private String surfaceCode;
     private Double xPos;
     private Double yPos;
-    private Double phase;
-    private Double amplitude;
-    private Integer reuseCount;
-    private String surfaceCode;
     private Integer status;
-    private Integer taskId;
 }

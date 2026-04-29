@@ -1,6 +1,5 @@
 package cn.hush.dar.task.dao.entity;
 
-
 import com.mybatisflex.annotation.Id;
 import com.mybatisflex.annotation.KeyType;
 import com.mybatisflex.annotation.Table;
@@ -11,13 +10,6 @@ import lombok.NoArgsConstructor;
 
 import java.util.Date;
 
-/**
- * @program: DAR
- * @description:
- * @author: Hush
- * @create: 2026-01-06 01:41
- **/
-
 @Data
 @Builder
 @NoArgsConstructor
@@ -27,18 +19,24 @@ public class TaskEntity {
     @Id(keyType = KeyType.Auto)
     private Integer id;
     private String name;
-    //数值越大优先级越高
     private Integer priority;
     private Integer neededAntennas;
     private Integer neededCpuCores;
     private Integer neededGpuMem;
-    private Integer duration; // 模拟任务耗时(秒)
-    private Integer remainingSeconds; // 剩余时间(秒)
-    private Double virtualShare; // DRF 累计公平份额
-
-    // 0:PENDING, 1:RUNNING, 2:COMPLETED, 3:FAILED
+    private Double beamFrequency;
+    private String beamGroup;
+    private String preferredSurface;
+    private String antennaScheduleMode;
+    private Integer deadlineMs;
+    private Boolean allowCrossSurface;
+    private Integer targetReuseLimit;
+    private String computeScheduleMode;
+    private String dependsOnTaskIds;
+    private String repelTaskIds;
+    private Integer duration;
+    private Integer remainingSeconds;
+    private Double virtualShare;
     private Integer status;
-
     private Date createTime;
     private Date startTime;
     private Date endTime;

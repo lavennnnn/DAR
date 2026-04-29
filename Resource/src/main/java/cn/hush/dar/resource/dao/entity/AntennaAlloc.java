@@ -8,22 +8,25 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+
+/**
+ * @program: DAR
+ * @description: 任务-天线分配记录
+ * @author: Hush
+ * @create: 2026-03-25
+ **/
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Table("t_antenna_unit")
-public class AntennaResource {
+@Table("t_antenna_unit_alloc")
+public class AntennaAlloc {
     @Id(keyType = KeyType.Auto)
-    private Integer id;
-    private Integer antennaId;
-    private String unitCode;
-    private Double xPos;
-    private Double yPos;
-    private Double phase;
-    private Double amplitude;
-    private Integer reuseCount;
-    private String surfaceCode;
-    private Integer status;
+    private Long id;
     private Integer taskId;
+    private Integer antennaId;
+    private Double beamFrequency;
+    private String beamGroup;
+    private Date createTime;
 }
