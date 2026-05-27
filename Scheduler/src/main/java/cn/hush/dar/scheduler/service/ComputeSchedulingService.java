@@ -305,6 +305,44 @@ public class ComputeSchedulingService {
         return MODE_BALANCE;
     }
 
+    /**
+     * Benchmark: force PACKED or BALANCE mode, skip dependency/repel checks.
+     * Read-only operation - does not allocate resources.
+     */
+    public ComputePlan benchmarkPlan(TaskEntity task, String forceMode) {
+        List<CPUResource> cpus = resourceService.getAllCPUs();
+        List<GPUResource> gpus = resourceService.getAllGPUs();
+
+        String mode = MODE_PACKED.equalsIgnoreCase(forceMode) ? MODE_PACKED : MODE_BALANCE;
+
+        LinkedHashMap<Integer, Integer> cpuPlan = planCpu(task, cpus, mode);
+        int neededCpu = task.getNeededCpuCores() == null ? 0 : task.getNeededCpuCores();
+        int plannedCpu = cpuPlan.values().stream().mapToInt(Integer::intValue).sum();
+        if (plannedCpu < neededCpu) {
+            return infeasible("cpu insufficient for benchmark", mode);
+        }
+
+        Integer gpuId = planGpu(task, gpus, mode);
+        int neededGpu = task.getNeededGpuMem() == null ? 0 : task.getNeededGpuMem();
+        if (neededGpu > 0 && gpuId == null) {
+            return infeasible("gpu insufficient for benchmark", mode);
+        }
+
+        double cpuScore = computeCpuVariance(cpus, cpuPlan, null, 0);
+        double gpuScore = computeGpuVariance(gpus, gpuId, neededGpu);
+
+        return ComputePlan.builder()
+                .feasible(true)
+                .mode(mode)
+                .cpuAllocations(cpuPlan)
+                .gpuId(gpuId)
+                .gpuMem(neededGpu)
+                .cpuScore(cpuScore)
+                .gpuScore(gpuScore)
+                .detail("benchmark mode=" + mode)
+                .build();
+    }
+
     @Data
     @Builder
     @NoArgsConstructor

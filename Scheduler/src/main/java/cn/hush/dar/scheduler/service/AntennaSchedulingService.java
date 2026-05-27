@@ -447,6 +447,42 @@ public class AntennaSchedulingService {
         public double getScore() { return score; }
     }
 
+    /**
+     * Benchmark: force a specific algorithm without fallback chain.
+     * Read-only operation - does not allocate resources.
+     */
+    public SelectionResult benchmarkPlan(TaskEntity task, String forceAlgorithm) {
+        int required = requiredUnits(task);
+        if (required <= 0) return SelectionResult.empty("NONE");
+        List<AntennaResource> all = resourceService.getAllAntennas();
+        if (all == null || all.isEmpty()) return SelectionResult.empty("NONE");
+
+        Map<Integer, List<AntennaAlloc>> allocMap = resourceService.getActiveAntennaAllocs().stream()
+                .collect(Collectors.groupingBy(AntennaAlloc::getAntennaId));
+        List<AntennaResource> candidates = all.stream()
+                .filter(a -> a.getStatus() == null || a.getStatus() != 2)
+                .filter(a -> isAntennaCandidate(a, task, allocMap))
+                .sorted(candidateComparator(allocMap))
+                .collect(Collectors.toList());
+        if (candidates.size() < required) return SelectionResult.empty("INSUFFICIENT");
+
+        Map<Integer, List<Integer>> adjacency = buildAdjacency(candidates, all);
+        List<SurfaceBucket> buckets = buildSurfaceBuckets(candidates, allocMap, task);
+        String preferred = normalize(task.getPreferredSurface());
+
+        ScheduleMode mode = ScheduleMode.from(forceAlgorithm);
+        if (mode == ScheduleMode.AUTO) return selectPlan(task);
+
+        return switch (mode) {
+            case BFS -> bfsPlan(candidates, adjacency, allocMap, required, preferred);
+            case DIJKSTRA -> dijkstraPlan(candidates, adjacency, allocMap, required, preferred);
+            case GREEDY -> greedyPlan(candidates, adjacency, allocMap, required, preferred);
+            case HEAP -> heapPlan(candidates, adjacency, allocMap, required, task, buckets);
+            case DP -> dpPlan(candidates, adjacency, allocMap, required, preferred);
+            default -> SelectionResult.empty("UNKNOWN");
+        };
+    }
+
     private record PathNode(Integer antennaId, double score) {}
     private record SurfaceCursor(String surfaceCode, int index, double score) {}
     private record SurfaceBucket(String surfaceCode, List<AntennaResource> antennas, double averageWeight) {}

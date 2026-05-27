@@ -123,24 +123,24 @@ public class ResourceServiceImpl implements ResourceService {
         cpuMapper.insertBatch(list);
     }
 
-    //鍒濆鍖朑PU
     private void initGPUs() {
         gpuMapper.deleteByQuery(new QueryWrapper().where("1=1"));
+        gpuAllocMapper.deleteByQuery(new QueryWrapper().where("1=1"));
         List<GPUResource> list = new ArrayList<>();
-        String[] models = {"NVIDIA A100", "NVIDIA RTX 4090", "NVIDIA V100"};
-        Random random = new Random();
-
-        for (int i = 1; i <= 8; i++) {
-            list.add(GPUResource.builder()
-                    .model(models[random.nextInt(models.length)])
-                    .totalMemory(24) // 24GB 鏄惧瓨
-                    .usedMemory(0)
-                    .status(0)
-                    .build());
-        }
+        list.add(GPUResource.builder()
+                .model("NVIDIA A100")
+                .totalMemory(40)
+                .usedMemory(0)
+                .status(0)
+                .build());
+        list.add(GPUResource.builder()
+                .model("NVIDIA RTX 4090")
+                .totalMemory(24)
+                .usedMemory(0)
+                .status(0)
+                .build());
         gpuMapper.insertBatch(list);
     }
-
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void resetAllResources() {
@@ -278,6 +278,8 @@ public class ResourceServiceImpl implements ResourceService {
         }
 
         log.info("task[{}] allocated antennas: {}", taskId, antennaIds);
+        // 同步更新物理天线状态：有阵元被占用则标记为繁忙
+        updatePhysicalAntennaStatusByUnits(antennaIds);
         return success;
     }
 
@@ -329,6 +331,8 @@ public class ResourceServiceImpl implements ResourceService {
             }
         }
 
+        // 同步更新物理天线状态：检查释放后是否还有阵元被占用
+        updatePhysicalAntennaStatusByUnits(antennaIds);
         log.info("task[{}] antenna resources released", taskId);
     }
 
@@ -728,6 +732,34 @@ public class ResourceServiceImpl implements ResourceService {
         }
         String trimmed = surfaceCode.trim();
         return trimmed.isEmpty() ? null : trimmed.toUpperCase();
+    }
+
+    /**
+     * 根据阵元ID列表，更新其所属物理天线的状态：
+     * 若该物理天线下有任意阵元被占用(status=1)则标记为繁忙(1)，否则恢复为在线(0)
+     */
+    private void updatePhysicalAntennaStatusByUnits(List<Integer> unitIds) {
+        if (unitIds == null || unitIds.isEmpty()) return;
+        // 找到这些阵元所属的物理天线ID
+        List<Integer> physicalIds = unitIds.stream()
+                .map(antennaMapper::selectOneById)
+                .filter(java.util.Objects::nonNull)
+                .map(AntennaResource::getAntennaId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        for (Integer physicalId : physicalIds) {
+            // 检查该物理天线下是否还有任何阵元处于占用状态
+            long busyCount = antennaMapper.selectCountByQuery(
+                    QueryWrapper.create()
+                            .eq(AntennaResource::getAntennaId, physicalId)
+                            .eq(AntennaResource::getStatus, 1)
+            );
+            UpdateChain.of(PhysicalAntennaResource.class)
+                    .set(PhysicalAntennaResource::getStatus, busyCount > 0 ? 1 : 0)
+                    .where(PhysicalAntennaResource::getId).eq(physicalId)
+                    .update();
+        }
     }
 
 }
